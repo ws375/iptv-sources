@@ -2,7 +2,7 @@ name: update schedule
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: '0 2,8,14,20 * * *'  # UTC时间：2点、8点、14点、20点 → 北京时间10点、16点、22点、4点
   workflow_dispatch:  # ← 添加这行，允许手动触发测试
 
 permissions:
