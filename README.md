@@ -1,5 +1,7 @@
 # iptv-sources
 
+[![Docker Image](https://img.shields.io/docker/image-size/yunnysunny/iptv-sources/latest?logo=docker&label=docker)](https://hub.docker.com/r/yunnysunny/iptv-sources)
+
 自动更新的 IPTV 直播源，支持 M3U、TXT 和 TVBox 格式，并提供基于静态文件的 EPG（电子节目预告）服务。
 
 **本项目仓库**：[yunnysunny/iptv-sources](https://github.com/yunnysunny/iptv-sources) 基于 [HerbertHe/iptv-sources](https://github.com/HerbertHe/iptv-sources) 开发。
@@ -16,78 +18,62 @@
 |------|------|
 | [epg.pw](https://epg.pw/test_channel_page.html) | 全球频道 |
 | [youhun](https://github.com/HerbertHe/youhun) | 国内频道 |
-| [zbds](https://github.com/youhunwl/TVAPP) | 国内频道 |
 | [hotel_tvn](https://github.com/HerbertHe/hotel_tvn) | 酒店源 |
+
+
+## 点播源
+
+| 来源 | 说明 |
+|------|------|
+| [王小二放牛娃](https://www.xn--4kq62z5rby2qupq9ub.top/) | TVBox点播 |
 
 ## EPG 数据源
 
 | 来源 | 说明 |
 |------|------|
-| [epg.51zmt.top:8000](http://epg.51zmt.top:8000/) | 央视、卫视及地方频道 |
-| [epg.pw](https://epg.pw/) | 抓取中国地区频道列表并合并为一份 XMLTV；同时生成 TVBox 用按日/频道 JSON（`epg/epg_pw/…`） |
+| [epg.51zmt.top:8000](http://epg.51zmt.top:8000/) | 构建时拉取 XMLTV，保存为 `epg/51zmt.xml` 等；再按日期、频道拆成 TVBox JSON（`epg/51zmt/{date}/…`） |
+| [epg.pw](https://epg.pw/) | 抓取中国地区频道列表, 生成 **`epg/pw-7/{date}/{NAME}.json`**（约 7 天滚动窗口） |
 
 ## EPG 使用说明
 
-本项目提供两种 EPG 格式：**标准 XMLTV 格式**（适用于大多数 IPTV 播放器）和 **TVBox 专用 JSON 格式**（零成本静态方案）。
+本项目提供两种 EPG 形态：**标准 XMLTV（`.xml`）**，适用于 Kodi、DIYP 等；**TVBox 静态 JSON**，按 URL 模板直接访问静态文件，无需自建后端。
 
 ### 标准 EPG（XMLTV XML）
 
-项目会将上游 EPG 数据原样保存为 XML 文件，适用于支持 XMLTV 格式的播放器（如 Kodi、DIYP、Perfect Player 等）。
+构建产物位于站点根目录下的 `epg/`，与下表文件名一致：
 
-可用的 EPG XML 链接：
+| 名称 | 链接示例 |
+|------|----------|
+| 51zmt | `https://your-domain.pages.dev/epg/51zmt.xml` |
+| 51zmt cc | `https://your-domain.pages.dev/epg/51zmt_cc.xml` |
+| 51zmt 地方台 | `https://your-domain.pages.dev/epg/51zmt_df.xml` |
+| epg.pw China 聚合 | `https://your-domain.pages.dev/epg/epg_pw.xml` |
 
-| 名称 | 链接 |
-|------|------|
-| 51zmt.top | `https://your-domain.pages.dev/epg/51zmt.xml` |
-| 51zmt.top cc | `https://your-domain.pages.dev/epg/51zmt_cc.xml` |
-| 51zmt.top 地方台 | `https://your-domain.pages.dev/epg/51zmt_df.xml` |
-
-在 M3U 文件头部通过 `x-tvg-url` 指定即可：
+在 M3U 头部使用 `x-tvg-url` 指向上述任一地址即可，例如：
 
 ```
 #EXTM3U x-tvg-url="https://your-domain.pages.dev/epg/51zmt.xml"
 ```
 
-或在播放器的 EPG 设置中直接填入上述 XML 链接。
+### 51zmt TVBox EPG
 
-### TVBox EPG（静态 JSON）
+构建脚本会解析 XMLTV，按**节目日期（东八区）**与**频道**写入多份小 JSON，路径为：
 
-本项目会将 XMLTV 格式的 EPG 数据解析后，按日期和频道拆分为独立的 JSON 文件，以 `epg/{provider}/{date}/{channel}.json` 的路径结构部署到 Cloudflare Pages。其中 `provider` 与 XML 文件名一致，例如 `51zmt`、`epg_pw` 等。
-
-利用 TVBox 的 EPG 链接动态参数替换特性（`{date}` 替换为当天日期，`{name}` 替换为频道名），你只需配置一个 URL 模板，TVBox 就能自动请求到对应的静态 JSON 文件，无需任何后端服务。
-
-在直播源 JSON 中添加 `epg` 字段（任选其一数据源，需与 M3U 里频道名称尽量一致）：
-
-**51zmt 系列：**
-
-```json
-{
-  "lives": [
-    {
-      "group": "Channels",
-      "channels": [
-        {
-          "name": "CCTV1",
-          "urls": ["http://your-iptv-source-url"]
-        }
-      ]
-    }
-  ],
-  "epg": "https://your-domain.pages.dev/epg/51zmt/{date}/{name}.json"
-}
+```text
+epg/{provider}/{date}/{name}.json
 ```
 
-**epg.pw 聚合（中国地区）：**
+- **`provider`**：与 `epg/` 下对应 XML 文件名（不含扩展名）一致，例如 `51zmt`、`51zmt_cc` `51zmt_df` 。
+- **`{date}`**：TVBox 替换为当天日期，格式为 **`YYYY-MM-DD`**（与生成目录名一致）。
+- **`{name}`**：TVBox 替换为当前频道名；**实际文件名**会去掉非法文件名字符（如 `/`、`*` 等），与生成脚本中的 `sanitize` 规则一致。
 
-```json
-{
-  "epg": "https://your-domain.pages.dev/epg/epg_pw/{date}/{name}.json"
-}
-```
+任选一种数据源，在直播源 JSON 的 `epg` 中填写完整 URL 模板即可。
 
-> 将 `your-domain.pages.dev` 替换为你的 Cloudflare Pages 域名。
+更多背景见 [EPG 方案详解](docs/EPG.md)。
 
-更多背景和细节请参阅 [EPG 方案详解](docs/EPG.md)。
+### epg.pw TVBox EPG
+
+构建完成后 epg.pw TVBox EPG 构建完成后，会生成 `epg/epg-7/{date}/{name}.json` 等文件，其中 `{date}` 为当前日期，`{name}` 为频道名。
 
 ## 自行部署
 
@@ -114,11 +100,9 @@
    | Build command | ` pnpm build:static` |
    | Build output directory | `m3u` |
 
-   - 若需要生成镜像站检测表格（写入 `m3u/README.md`），可在上述 **Build command** 末尾追加 ` && pnpm build:matrix`（构建时间会显著增加）。
-
 ### 定时更新（GitHub Actions `schedule`）
 
-仓库中的 [`.github/workflows/schedule.yml`](.github/workflows/schedule.yml) 按 cron **每 2 小时**执行：安装依赖、`pnpm build`、`pnpm m3u`、`pnpm matrix`，然后根据是否配置 Cloudflare 直连上传凭据，选择两种后续行为之一：
+仓库中的 [`.github/workflows/schedule.yml`](.github/workflows/schedule.yml) 按 cron **每 2 小时**执行：安装依赖、`pnpm build`、`pnpm m3u`，然后根据是否配置 Cloudflare 直连上传凭据，选择两种后续行为之一：
 
 | 条件 | 行为 |
 | --- | --- |
@@ -258,6 +242,7 @@ docker run -d --name iptv-sources --restart unless-stopped -p 8080:80 `
 | --- | --- |
 | `LIVE_RESULT_DIR` | nginx `location /` 的 `root`，默认 `/app/m3u` |
 | `M3U_ROOT` | 与上项二选一，效果相同（仍优先读已有 `schedule-config.json` 中的 `liveResultDir`） |
+| `CUSTOM_URL`| 站点根 URL，影响 TvBox json 配置文件中 epg 的链接前缀，格式可以为 `http://ip:port` , 其中 `ip` 为 docker 容器运行的宿主机ip |
 
 一般无需设置环境变量；仅当你需要把 nginx 的 `root` 指到容器内**其他目录**时配置 `LIVE_RESULT_DIR` 或 `M3U_ROOT` 即可。
 

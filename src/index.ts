@@ -1,6 +1,8 @@
 import { hrtime } from 'process';
 
 import { updateChannelsJson } from './channels';
+import { epgs_sources } from './epgs';
+import { buildEpgPwXml } from './epgs/epg_pw';
 import {
   cleanFiles,
   getContent,
@@ -14,12 +16,9 @@ import {
 } from './file';
 import { updateChannelList, updateReadme } from './readme';
 import { sources } from './sources';
-import { updateByRollback, updateEPGByRollback } from './rollback';
-import { epgs_sources } from './epgs';
-import { buildEpgPwXml } from './epgs/epg_pw';
-import { writeTvBoxJson } from './tvbox';
-import { Collector } from './utils';
 import { runCustomTask } from './task/custom';
+import { writeTvBoxJson as writeTvBoxLiveJson } from './tvbox';
+import { Collector } from './utils';
 
 cleanFiles();
 
@@ -46,40 +45,18 @@ cleanFiles();
               sourcesCollector.collect
             );
 
-            writeM3u(sr.f_name, m3u);
-            writeM3uToTxt(sr.name, sr.f_name, m3u);
-            writeSources(sr.name, sr.f_name, sourcesCollector.result());
-            writeTvBoxJson(sr.f_name, [{ name: sr.name, f_name: sr.f_name }], sr.name);
+            await writeM3u(sr.f_name, m3u);
+            await writeM3uToTxt(sr.name, sr.f_name, m3u);
+            await writeSources(sr.name, sr.f_name, sourcesCollector.result());
             updateChannelList(sr.name, sr.f_name, m3u);
             return ['normal', count];
           }
-          // rollback
-          const res = await updateByRollback(sr, sr.filter);
-          if (res) {
-            const [m3u, count] = res;
-            writeM3u(sr.f_name, m3u);
-            writeM3uToTxt(sr.name, sr.f_name, m3u);
-            writeTvBoxJson(sr.f_name, [{ name: sr.name, f_name: sr.f_name }], sr.name);
-            updateChannelList(sr.name, sr.f_name, m3u, true);
-            return ['rollback', count];
-          }
-          // rollback failed
           console.log(`[WARNING] m3u ${sr.name} get failed!`);
-          return ['rollback', void 0];
+          return ['normal', void 0];
         } catch (e) {
           console.log(e);
-          const res = await updateByRollback(sr, sr.filter);
-          if (res) {
-            const [m3u, count] = res;
-            writeM3u(sr.f_name, m3u);
-            writeM3uToTxt(sr.name, sr.f_name, m3u);
-            writeTvBoxJson(sr.f_name, [{ name: sr.name, f_name: sr.f_name }], sr.name);
-            updateChannelList(sr.name, sr.f_name, m3u, true);
-            return ['rollback', count];
-          }
-          // rollback failed
           console.log(`[WARNING] m3u ${sr.name} get failed!`);
-          return ['rollback', void 0];
+          return ['normal', void 0];
         }
       })
     );
@@ -96,26 +73,13 @@ cleanFiles();
                 (parseInt(hrtime.bigint().toString()) - parseInt(now.toString())) / 10e6
               } ms`
             );
-            writeEpgXML(epg_sr.f_name, text as string);
+            await writeEpgXML(epg_sr.f_name, text as string);
             return ['normal'];
           }
-          // rollback
-          const epgText = await updateEPGByRollback(epg_sr);
-          if (epgText) {
-            writeEpgXML(epg_sr.f_name, epgText as string);
-            return ['rollback'];
-          }
-          // rollback failed
           console.log(`[WARNING] EPG ${epg_sr.name} get failed!`);
           return [void 0];
         } catch (_e) {
           console.warn('Error fetching EPG', _e, epg_sr);
-          const epgText = await updateEPGByRollback(epg_sr);
-          if (epgText) {
-            writeEpgXML(epg_sr.f_name, epgText as string);
-            return ['rollback'];
-          }
-          // rollback failed
           console.log(`[WARNING] EPG ${epg_sr.name} get failed!`);
           return [void 0];
         }
@@ -126,7 +90,7 @@ cleanFiles();
     try {
       console.log('[TASK] Build EPG from epg.pw ...');
       const epgPwXml = await buildEpgPwXml();
-      writeEpgXML('epg_pw', epgPwXml);
+      await writeEpgXML('epg_pw', epgPwXml);
       console.log('[TASK] EPG from epg.pw written successfully');
     } catch (e) {
       console.warn('[WARNING] EPG from epg.pw failed:', e);
@@ -143,8 +107,8 @@ cleanFiles();
     ) as Array<[string | undefined]>;
     mergeTxts();
     mergeSources();
-    writeEpgJsonByDate();
-    writeTvBoxJson('tvbox', sources, 'Channels');
+    await writeEpgJsonByDate();
+    await writeTvBoxLiveJson('tvbox', sources);
     updateChannelsJson(sources, sources_res, epgs_sources);
     updateReadme(sources, sources_res, epgs_sources, epgs_res);
 

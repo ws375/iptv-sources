@@ -1,12 +1,37 @@
 import fs from 'fs';
+import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { hrtime } from 'process';
+import { fileURLToPath } from 'url';
 
+import type { TEPGSource } from './epgs/utils';
+import type { ISource } from './sources';
 import { with_github_raw_url_proxy } from './sources';
 import { m3u2txt } from './utils';
-import type { ISource } from './sources';
-import type { TEPGSource } from './epgs/utils';
+
 import { mergeByDateAndChannel, parseEpgXml, sanitizeChannelFileName } from './epgs/parser';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+/**
+ * 假设你这个项目里，projectRoot 最终是项目根目录：
+  E:\kuaipan\code\pages\iptv-sources
+
+  • 开发运行时（tsx src/index.ts）
+    __dirname 是 E:\kuaipan\code\pages\iptv-sources\src，.. 后就是根目录
+
+  • 构建后运行时（node dist/index.js）
+    __dirname 是 E:\kuaipan\code\pages\iptv-sources\dist，.. 后也还是根目录
+
+  所以这三句在你当前结构下会稳定得到同一个 projectRoot。
+ */
+export const projectRoot = path.resolve(__dirname, '..');
+
+export const createSubDirectory = async (...parts: string[]) => {
+  const subDir = path.join(projectRoot, ...parts);
+  await mkdir(subDir, { recursive: true });
+  return subDir;
+};
 
 export const getContent = async (src: ISource | TEPGSource) => {
   const now = hrtime.bigint();
@@ -18,26 +43,24 @@ export const getContent = async (src: ISource | TEPGSource) => {
   return [res.ok, await res.text(), now];
 };
 
-export const writeM3u = (name: string, m3u: string) => {
-  if (!fs.existsSync(path.join(path.resolve(), 'm3u'))) {
-    fs.mkdirSync(path.join(path.resolve(), 'm3u'));
-  }
-
-  fs.writeFileSync(path.join(path.resolve(), 'm3u', `${name}.m3u`), m3u);
+export const writeM3u = async (name: string, m3u: string) => {
+  const m3uDir = await createSubDirectory('m3u');
+  await writeFile(path.join(m3uDir, `${name}.m3u`), m3u);
 };
 
-export const writeSources = (name: string, f_name: string, sources: Map<string, string[]>) => {
+export const writeSources = async (
+  name: string,
+  f_name: string,
+  sources: Map<string, string[]>
+) => {
   const srcs: Record<string, string[]> = {};
   for (const [k, v] of sources) {
     srcs[k] = v;
   }
 
-  if (!fs.existsSync(path.resolve('m3u', 'sources'))) {
-    fs.mkdirSync(path.resolve('m3u', 'sources'));
-  }
-
-  fs.writeFileSync(
-    path.resolve('m3u', 'sources', `${f_name}.json`),
+  const sourcesDir = await createSubDirectory('m3u', 'sources');
+  await writeFile(
+    path.join(sourcesDir, `${f_name}.json`),
     JSON.stringify({
       name,
       sources: srcs,
@@ -45,15 +68,12 @@ export const writeSources = (name: string, f_name: string, sources: Map<string, 
   );
 };
 
-export const writeM3uToTxt = (name: string, f_name: string, m3u: string) => {
+export const writeM3uToTxt = async (name: string, f_name: string, m3u: string) => {
   const m3uArray = m3u.split('\n');
   const txt = m3u2txt(m3uArray);
 
-  if (!fs.existsSync(path.join(path.resolve(), 'm3u', 'txt'))) {
-    fs.mkdirSync(path.join(path.resolve(), 'm3u', 'txt'));
-  }
-
-  fs.writeFileSync(path.join(path.resolve(), 'm3u', 'txt', `${f_name}.txt`), txt);
+  const txtDir = await createSubDirectory('m3u', 'txt');
+  await writeFile(path.join(txtDir, `${f_name}.txt`), txt);
 };
 
 export const mergeTxts = () => {
@@ -91,23 +111,19 @@ export const mergeSources = () => {
   fs.writeFileSync(path.join(sources_p, 'sources.json'), JSON.stringify(res));
 };
 
-export const writeEpgXML = (f_name: string, xml: string) => {
-  if (!fs.existsSync(path.join(path.resolve(), 'm3u', 'epg'))) {
-    fs.mkdirSync(path.join(path.resolve(), 'm3u', 'epg'));
-  }
-
-  fs.writeFileSync(path.resolve('m3u', 'epg', `${f_name}.xml`), xml);
+export const writeEpgXML = async (f_name: string, xml: string) => {
+  const epgDir = await createSubDirectory('m3u', 'epg');
+  await writeFile(path.join(epgDir, `${f_name}.xml`), xml);
 };
-
+export async function makeEpgDir() {
+  return await createSubDirectory('m3u', 'epg');
+}
 /**
  * 将单份 XMLTV XML 解析为 TVBox 所需的按日期、频道 JSON 文件
  * 输出路径: m3u/epg/{provider}/{YYYY-MM-DD}/{频道名}.json
  */
-export const writeEpgJsonFromXml = (provider: string, xml: string) => {
-  const epgDir = path.resolve('m3u', 'epg');
-  if (!fs.existsSync(epgDir)) {
-    fs.mkdirSync(epgDir, { recursive: true });
-  }
+export const writeEpgJsonFromXml = async (provider: string, xml: string) => {
+  const epgDir = await makeEpgDir();
 
   const allItems = parseEpgXml(xml);
   const byDateChannel = mergeByDateAndChannel(allItems);
@@ -117,7 +133,7 @@ export const writeEpgJsonFromXml = (provider: string, xml: string) => {
   for (const [key, data] of byDateChannel) {
     const [date, channel] = key.split('\t');
     const dateDir = path.join(epgDir, provider, date);
-    if (!fs.existsSync(dateDir)) fs.mkdirSync(dateDir, { recursive: true });
+    await mkdir(dateDir, { recursive: true });
     const fileName = `${sanitizeChannelFileName(channel)}.json`;
     fs.writeFileSync(path.join(dateDir, fileName), JSON.stringify(data, null, 2));
     console.log(`[TASK] Write EPG JSON for ${provider} ${date} ${channel}`);
@@ -128,8 +144,8 @@ export const writeEpgJsonFromXml = (provider: string, xml: string) => {
  * 解析 m3u/epg 下所有 .xml，按日期(YYYYmmdd)、频道生成 JSON 到 epg/{provider}/{date}/channelname.json
  * （epg_pw 在构建时由 epg_pw 模块单独写入 JSON，此处跳过避免重复解析大文件）
  */
-export const writeEpgJsonByDate = () => {
-  const epgDir = path.resolve('m3u', 'epg');
+export const writeEpgJsonByDate = async () => {
+  const epgDir = path.join(projectRoot, 'm3u', 'epg');
   if (!fs.existsSync(epgDir)) return;
 
   const files = fs.readdirSync(epgDir);
@@ -141,7 +157,7 @@ export const writeEpgJsonByDate = () => {
     if (f === 'epg_pw.xml') continue;
     const provider = f.split('.')[0];
     const xml = fs.readFileSync(path.join(epgDir, f), 'utf-8');
-    writeEpgJsonFromXml(provider, xml);
+    await writeEpgJsonFromXml(provider, xml);
   }
 };
 
@@ -158,4 +174,4 @@ const cleanDir = (p: string) => {
   }
 };
 
-export const cleanFiles = () => cleanDir(path.join(path.resolve(), 'm3u'));
+export const cleanFiles = () => cleanDir(path.join(projectRoot, 'm3u'));

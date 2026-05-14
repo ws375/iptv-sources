@@ -48,7 +48,7 @@ jobs:
       - run: pnpm install
       - run: pnpm build
       - run: pnpm m3u
-      - run: pnpm matrix
+      - run: sudo apt-get install -y tree
 
       - name: Publish m3u (Cloudflare direct upload or empty commit)
         env:
@@ -58,6 +58,7 @@ jobs:
         run: |
           if [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
             pnpm static
+            tree m3u
             npx wrangler pages deploy m3u --project-name="${PROJECT_NAME}"
           else
             git config user.name "github-actions[bot]"
