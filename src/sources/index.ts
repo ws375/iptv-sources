@@ -9,6 +9,7 @@ export * from './cymz6_lives';
 export * from './youhun';
 export * from './zbds';
 export * from './hotel_tvn';
+export * from './dft';
 export * from './utils';
 
 import {
@@ -24,6 +25,7 @@ import {
   youhun_sources,
   // zbds_sources,
   hotel_tvn_sources,
+  dft_sources,
 } from '.';
 
 export const sources = [
@@ -39,4 +41,5 @@ export const sources = [
   // ...qwerttvv_bj_iptv_sources,
   ...youhun_sources,
   // ...zbds_sources,
+  dft_sources,
 ];
