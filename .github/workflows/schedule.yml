@@ -50,16 +50,18 @@ jobs:
       - run: pnpm m3u
       - run: sudo apt-get install -y tree
 
-      - name: Publish m3u (Cloudflare direct upload or empty commit)
+       - name: Publish m3u (Cloudflare direct upload or empty commit)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PROJECT_NAME: ${{ vars.PROJECT_NAME || secrets.PROJECT_NAME }}
         run: |
-          if [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
             pnpm static
             tree m3u
-            npx wrangler pages deploy m3u --project-name="${PROJECT_NAME}"
+            echo "开始压缩m3u播放列表文件"
+            find m3u -type f -name "*.m3u" -exec gzip {} \;
+            npx wrangler pages deploy m3u --project-name="$PROJECT_NAME"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
