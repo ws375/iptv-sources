@@ -90,7 +90,7 @@ cleanFiles();
     try {
       console.log('[TASK] Build EPG from epg.pw ...');
       const epgPwXml = await buildEpgPwXml();
-      await writeEpgXML('epg_pw', epgPwXml);
+    
       console.log('[TASK] EPG from epg.pw written successfully');
     } catch (e) {
       console.warn('[WARNING] EPG from epg.pw failed:', e);
