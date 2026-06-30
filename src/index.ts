@@ -118,3 +118,4 @@ cleanFiles();
     console.error(err);
   }
 })();
+console.log('#EXT-X-EPG:URL=https://raw.githubusercontent.com/ws375/iptv-sources/releases/download/latest-epg/epg_pw.xml')
